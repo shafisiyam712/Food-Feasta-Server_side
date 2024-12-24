@@ -37,7 +37,42 @@ async function run() {
       const result=await FoodCollection.insertOne(newFood)
       res.send(result)
     })
-    
+    //get food in server port and implement search
+    app.get('/foods', async (req, res) => {
+      const { searchParams } = req.query;
+      console.log("Search parameter received:", searchParams); 
+      let option = {};
+  
+      if (searchParams && searchParams.trim() !== "") {
+          option = { FoodName: { $regex: searchParams, $options: "i" } };
+      }
+  
+      try {
+          const result = await FoodCollection.find(option).toArray();
+          console.log("Filtered Results:", result); 
+          res.send(result);
+      } catch (error) {
+          console.error("Error fetching movies:", error);
+          res.status(500).send({ error: "Failed to fetch movies" });
+      }
+  });
+
+   //new top rated route to show in home
+   app.get('/foods/top', async (req, res) => {
+    try {
+        const cursor = FoodCollection.find()
+            .sort({ FoodQuantity: -1 }) // Sort by FoodQuantity in ascending order
+            .limit(6); // Limit the number of results to 6
+        const result = await cursor.toArray();
+        res.send(result);
+    } catch (error) {
+        console.error('Error fetching foods:', error);
+        res.status(500).send({ message: 'Internal Server Error' });
+    }
+});
+
+
+
   } finally {
     // Ensures that the client will close when you finish/error
     //await client.close();

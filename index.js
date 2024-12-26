@@ -31,6 +31,7 @@ async function run() {
     const RequestCollection = client.db('Fooddb').collection('Request');
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
+
     //get all food item in db
     app.post('/foods',async(req,res)=>{
       const newFood=req.body
@@ -38,25 +39,8 @@ async function run() {
       const result=await FoodCollection.insertOne(newFood)
       res.send(result)
     })
+
     //get food in server port and implement search
-  //   app.get('/foods', async (req, res) => {
-  //     const { searchParams } = req.query;
-  //     console.log("Search parameter received:", searchParams); 
-  //     let option = {};
-  
-  //     if (searchParams && searchParams.trim() !== "") {
-  //         option = { FoodName: { $regex: searchParams, $options: "i" } };
-  //     }
-  
-  //     try {
-  //         const result = await FoodCollection.find(option).toArray();
-  //         console.log("Filtered Results:", result); 
-  //         res.send(result);
-  //     } catch (error) {
-  //         console.error("Error fetching movies:", error);
-  //         res.status(500).send({ error: "Failed to fetch movies" });
-  //     }
-  // });
   app.get('/foods', async (req, res) => {
     const { searchParams } = req.query;
     console.log("Search parameter received:", searchParams);
@@ -81,8 +65,9 @@ async function run() {
 
    //new top rated route to show in home
    app.get('/foods/top', async (req, res) => {
+    let option = { status: "available" };
     try {
-        const cursor = FoodCollection.find()
+        const cursor = FoodCollection.find(option)
             .sort({ FoodQuantity: -1 }) // Sort by FoodQuantity in ascending order
             .limit(6); // Limit the number of results to 6
         const result = await cursor.toArray();
@@ -93,106 +78,147 @@ async function run() {
     }
 });
 
-//requested food
+
+
+
+// Request food: Insert request and update food status
 app.post("/foods/request", async (req, res) => {
-  const { foodId } = req.body;
+  const {
+    foodId,
+    FoodName,
+    FoodImage,
+    PickUpLocation,
+    ExpiredDate,
+    Notes,
+    donatorEmail,
+    donatorName,
+    requesterEmail,
+  } = req.body;
 
   try {
-    // Update the status of the food
-    const result = await FoodCollection.updateOne(
+    // Update food status to "not available"
+    const foodUpdateResult = await FoodCollection.updateOne(
       { _id: new ObjectId(foodId) },
       { $set: { status: "not available" } }
     );
 
-    if (result.modifiedCount > 0) {
-      res.send({ success: true });
-    } else {
-      res.status(400).send({ success: false, message: "Failed to update status" });
+    if (foodUpdateResult.modifiedCount === 0) {
+      return res
+        .status(400)
+        .send({ success: false, message: "Failed to update food status." });
     }
+
+    // Insert the request into RequestCollection
+    const requestResult = await RequestCollection.insertOne({
+      foodId,
+      FoodName,
+      FoodImage,
+      PickUpLocation,
+      ExpiredDate,
+      Notes,
+      donatorEmail,
+      donatorName,
+      requesterEmail,
+      requestDate: new Date(),
+    });
+
+    res.send({ success: true, requestId: requestResult.insertedId });
   } catch (error) {
-    console.error(error);
+    console.error("Error handling food request:", error);
     res.status(500).send({ success: false, message: "Server Error" });
   }
 });
 
-
-app.post("/foods/request", async (req, res) => {
-  // const { foodId } = req.body;
-
-  // try {
-  //   // Validate the foodId format
-  //   if (!ObjectId.isValid(foodId)) {
-  //     return res.status(400).send({ success: false, message: "Invalid food ID" });
-  //   }
-
-  //   // Update the status of the food to "not available"
-  //   const result = await FoodCollection.updateOne(
-  //     { _id: new ObjectId(foodId) },
-  //     { $set: { status: "not available" } }
-  //   );
-
-  //   if (result.modifiedCount > 0) {
-  //     res.send({ success: true, message: "Food status updated successfully." });
-  //   } else {
-  //     res.status(404).send({ success: false, message: "Food not found or already updated." });
-  //   }
-  // } catch (error) {
-  //   console.error("Error updating food status:", error);
-  //   res.status(500).send({ success: false, message: "Internal Server Error" });
-  // }
-  const newRequest=req.body
-  console.log(newRequest);
-  const result=await RequestCollection.insertOne(newRequest)
-  res.send(result)
-});
-
-// app.get("/foods/request", async (req, res) => {
-//   try {
-//     // Fetch all foods with status 'not available'
-//     const result = await FoodCollection.find({ status: "not available" }).toArray();
-//     if (result.length > 0) {
-//       res.send(result); // Send the data to the client
-//     } else {
-//       res.status(404).send({ success: false, message: "No requested foods found." });
-//     }
-//   } catch (error) {
-//     console.error("Error fetching requested foods:", error);
-//     res.status(500).send({ success: false, message: "Internal Server Error" });
-//   }
-// });
-
-
+// Get requested foods for a specific user
 app.get("/foods/request", async (req, res) => {
-  const { userEmail } = req.query; // Get the logged-in user's email from the query parameter
-console.log(userEmail);
+  const { userEmail } = req.query;
 
   if (!userEmail) {
     return res.status(400).send({ success: false, message: "User email is required." });
   }
 
   try {
-    // Fetch all foods with status 'not available' and userEmail as the logged-in user's email
-    const result = await FoodCollection.find({
-      status: "not available",
-      userEmail: userEmail, // Filter by userEmail
-    }).toArray();
-
-    if (result.length > 0) {
-      // Send the filtered data to the client only once
-      return res.send(result);
-    } else {
-      // Avoid sending another response if we already sent one
-      return res.status(404).send({ success: false, message: "No requested foods found for this user." });
-    }
+    const userRequests = await RequestCollection.find({ requesterEmail: userEmail }).toArray();
+    res.send(userRequests);
   } catch (error) {
-    // Catch any errors and ensure only one response is sent
-    console.error("Error fetching requested foods:", error);
-    return res.status(500).send({ success: false, message: "Internal Server Error" });
+    console.error("Error fetching user requests:", error);
+    res.status(500).send({ success: false, message: "Internal Server Error" });
+  }
+});
+
+//get specific user added food item from fooddb
+app.get("/foods/user", async (req, res) => {
+  const { userEmail } = req.query;
+
+  if (!userEmail) {
+    return res.status(400).send({ success: false, message: "User email is required." });
+  }
+
+  try {
+    // Find all food entries associated with the given email
+    const userFoods = await FoodCollection.find({ userEmail: userEmail}).toArray();
+    res.send(userFoods);
+  } catch (error) {
+    console.error("Error fetching user foods:", error);
+    res.status(500).send({ success: false, message: "Internal Server Error" });
   }
 });
 
 
 
+//update food 
+//get id from db
+
+
+app.get('/foods/user/:id', async (req, res) => {
+  const id = req.params.id;
+  const filter = { _id: new ObjectId(id) };
+  const food = await FoodCollection.findOne(filter);
+
+  if (food) {
+    res.status(200).send(food);
+  } else {
+    res.status(404).send({ message: 'Food not found' });
+  }
+});
+app.put('/foods/user/:id', async (req, res) => { 
+  try {
+    const id = req.params.id;
+    const filter = { _id: new ObjectId(id) };
+    const options = { upsert: true };
+    const updatedDoc = {
+      $set: req.body
+    };
+
+    const result = await FoodCollection.updateOne(filter, updatedDoc, options);
+    res.status(200).send(result); // Always return a proper response
+  } catch (error) {
+    console.error('Error updating food:', error);
+    res.status(500).send({ message: 'Failed to update food' });
+  }
+});
+
+
+  
+  
+  
+  //go to specific food 
+    app.get('/foods/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await FoodCollection.findOne(query);
+      res.send(result);
+  })
+  
+  
+  
+  //delete food
+   app.delete('/foods/:id',async (req,res)=>{
+    const id=req.params.id
+    const query= {_id:new ObjectId(id)}
+    const result=await FoodCollection.deleteOne(query)
+    res.send(result);
+  })
 
   } finally {
     // Ensures that the client will close when you finish/error

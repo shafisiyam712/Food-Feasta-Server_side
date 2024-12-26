@@ -11,8 +11,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 app.use(cors({
   origin: [
       'http://localhost:5173',
-      // 'https://job-portal-504b7.web.app',
-      // 'https://job-portal-504b7.firebaseapp.com'
+       'https://my-food-web.web.app',
+       'https://my-food-web.firebaseapp.com'
   ],
   credentials: true
 }));
@@ -56,11 +56,11 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    //await client.connect();
     // Send a ping to confirm a successful connection
     const FoodCollection = client.db('Fooddb').collection('FoodCollection');
     const RequestCollection = client.db('Fooddb').collection('Request');
-    await client.db("admin").command({ ping: 1 });
+    //await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
      // auth related APIs
      app.post('/jwt', (req, res) => {
@@ -203,8 +203,8 @@ app.get("/foods/request", async (req, res) => {
   }
 });
 
-//get specific user added food item from fooddb
-app.get("/foods/user", verifyToken, async (req, res) => {
+//get specific user added food item from fooddb (VerifyToken)
+app.get("/foods/user", async (req, res) => {
   const { userEmail } = req.query;
 
   if (!userEmail) {

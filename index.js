@@ -1,14 +1,45 @@
 require('dotenv').config();
 const express=require ('express')
 const cors=require ('cors')
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const app=express()
 const port=process.env.PORT || 5000
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 //middleware 
-app.use(cors())
+app.use(cors({
+  origin: [
+      'http://localhost:5173',
+      // 'https://job-portal-504b7.web.app',
+      // 'https://job-portal-504b7.firebaseapp.com'
+  ],
+  credentials: true
+}));
 app.use(express.json())
+// cookie parser middleware
+app.use(cookieParser());
 
+// custom middleware
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  // console.log('token inside the verifyToken', token);
+
+  if (!token) {
+      return res.status(401).send({ message: 'Unauthorized access' })
+  }
+
+  //verify the token
+  //Make sure ACCESS_TOKEN_SECRET is also added to your .env file
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+      if (err) {
+          return res.status(401).send({ message: 'Token verification failed: ' + err.message })
+      }
+      // if there is no error,
+      req.user = decoded;
+      next();
+  })
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.8q3cu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 console.log(uri);
@@ -31,6 +62,32 @@ async function run() {
     const RequestCollection = client.db('Fooddb').collection('Request');
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
+     // auth related APIs
+     app.post('/jwt', (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10h' });
+
+      res
+          .cookie('token', token, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict'
+          })
+          .send({ success: true })
+
+  });
+
+  app.post('/logout', (req, res) => {
+      res
+          .clearCookie('token', {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict'
+          })
+          .send({ success: true })
+  })
+
+
 
     //get all food item in db
     app.post('/foods',async(req,res)=>{
@@ -82,7 +139,7 @@ async function run() {
 
 
 // Request food: Insert request and update food status
-app.post("/foods/request", async (req, res) => {
+app.post("/foods/request",async (req, res) => {
   const {
     foodId,
     FoodName,
@@ -147,7 +204,7 @@ app.get("/foods/request", async (req, res) => {
 });
 
 //get specific user added food item from fooddb
-app.get("/foods/user", async (req, res) => {
+app.get("/foods/user", verifyToken, async (req, res) => {
   const { userEmail } = req.query;
 
   if (!userEmail) {
@@ -170,7 +227,7 @@ app.get("/foods/user", async (req, res) => {
 //get id from db
 
 
-app.get('/foods/user/:id', async (req, res) => {
+app.get('/foods/user/:id',async (req, res) => {
   const id = req.params.id;
   const filter = { _id: new ObjectId(id) };
   const food = await FoodCollection.findOne(filter);

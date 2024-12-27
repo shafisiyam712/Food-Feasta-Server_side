@@ -58,11 +58,14 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     //await client.connect();
     // Send a ping to confirm a successful connection
+
     const FoodCollection = client.db('Fooddb').collection('FoodCollection');
     const RequestCollection = client.db('Fooddb').collection('Request');
+    
     //await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-     // auth related APIs
+    //console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    
+    // auth related APIs for jwt token
      app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '10h' });
@@ -120,13 +123,13 @@ async function run() {
 });
 
 
-   //new top rated route to show in home
+   //new top rated route to show in home featured section
    app.get('/foods/top', async (req, res) => {
     let option = { status: "available" };
     try {
         const cursor = FoodCollection.find(option)
-            .sort({ FoodQuantity: -1 }) // Sort by FoodQuantity in ascending order
-            .limit(6); // Limit the number of results to 6
+            .sort({ FoodQuantity: -1 }) 
+            .limit(6); 
         const result = await cursor.toArray();
         res.send(result);
     } catch (error) {
@@ -138,7 +141,7 @@ async function run() {
 
 
 
-// Request food: Insert request and update food status
+// Request food Insert request and update food status
 app.post("/foods/request",async (req, res) => {
   const {
     foodId,
@@ -187,7 +190,7 @@ app.post("/foods/request",async (req, res) => {
 });
 
 // Get requested foods for a specific user
-app.get("/foods/request", async (req, res) => {
+app.get("/foods/request",verifyToken,async (req, res) => {
   const { userEmail } = req.query;
 
   if (!userEmail) {
@@ -204,7 +207,7 @@ app.get("/foods/request", async (req, res) => {
 });
 
 //get specific user added food item from fooddb (VerifyToken)
-app.get("/foods/user", async (req, res) => {
+app.get("/foods/user",verifyToken,async (req, res) => {
   const { userEmail } = req.query;
 
   if (!userEmail) {
